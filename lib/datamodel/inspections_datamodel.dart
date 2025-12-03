@@ -7,10 +7,10 @@ class InspectionDataModel {
   final DateTime? date;
   final String inspector;
   final String assetId;
-  final String status; // may contain UI label; will be normalized before insert
+  final String status; // UI label — will be mapped to DB value
   final String? notes;
   final String? vendor;
-  final String? severity; // may contain UI label; will be normalized before insert
+  final String? severity; // UI label — will be mapped to DB value
   final int photosCount;
   final DateTime? createdAt;
 
@@ -42,54 +42,58 @@ class InspectionDataModel {
     );
   }
 
-  /// Normalize UI labels to DB-safe values for status.
-  /// Accepts either already-normalized values or UI labels.
-  static String normalizeStatus(String uiStatus) {
+  /// Map UI labels to DB-allowed 'status' values.
+  /// DB expects: 'Pass', 'Fail', 'Completed'
+  static String mapStatusToDb(String uiStatus) {
     final s = uiStatus.trim().toLowerCase();
-    if (s == 'good' || s == 'ok') return 'good';
-    if (s == 'needs repair' || s == 'needs_repair' || s.contains('needs') && s.contains('repair')) return 'needs_repair';
-    if (s == 'critical') return 'critical';
-    // fallback: convert spaces to underscores and lowercase
-    return s.replaceAll(RegExp(r'\s+'), '_');
+
+    if (s == 'good' || s == 'pass' || s == 'ok') return 'Pass';
+    if (s.contains('needs') && s.contains('repair')) return 'Fail';
+    if (s == 'needs repair' || s == 'needs_repair' || s == 'needsrepair') return 'Fail';
+    if (s == 'critical' || s == 'fail' || s == 'failed') return 'Fail';
+    if (s == 'completed') return 'Completed';
+
+    // Fallback: if the UI already sent a DB value, normalize its case
+    final capitalized = uiStatus.trim();
+    if (['Pass', 'Fail', 'Completed'].contains(capitalized)) return capitalized;
+    // Last resort: return 'Fail' to avoid DB rejection (safer than unknown)
+    return 'Fail';
   }
 
-  /// Normalize severity similarly.
-  static String? normalizeSeverity(String? uiSeverity) {
+  /// Map UI severity to DB format: 'Low', 'Medium', 'High'
+  static String? mapSeverityToDb(String? uiSeverity) {
     if (uiSeverity == null) return null;
     final s = uiSeverity.trim().toLowerCase();
-    if (s.startsWith('l')) return 'low';
-    if (s.startsWith('m')) return 'medium';
-    if (s.startsWith('h')) return 'high';
-    // fallback: return lowercased value
-    return s.replaceAll(RegExp(r'\s+'), '_');
+    if (s.startsWith('l')) return 'Low';
+    if (s.startsWith('m')) return 'Medium';
+    if (s.startsWith('h')) return 'High';
+    // If already DB value (maybe user typed), normalize casing
+    final cap = uiSeverity.trim();
+    if (['Low', 'Medium', 'High'].contains(cap)) return cap;
+    // Fallback: capitalize first letter
+    return uiSeverity.trim()[0].toUpperCase() + uiSeverity.trim().substring(1).toLowerCase();
   }
 
-  /// Convert model to map ready for DB insert (snake_case column names)
   Map<String, dynamic> toMap() {
     final map = <String, dynamic>{
-      // date column in your table is 'date' (not timestamp), keep YYYY-MM-DD
       'date': date != null ? date!.toIso8601String().split('T').first : null,
       'inspector': inspector,
       'asset_id': assetId,
-      // normalize before sending — this ensures DB check constraints match
-      'status': normalizeStatus(status),
+      // Map UI -> DB expected values
+      'status': mapStatusToDb(status),
       'notes': notes,
       'vendor': vendor,
-      'severity': normalizeSeverity(severity),
+      'severity': mapSeverityToDb(severity),
       'photos_count': photosCount,
     };
 
-    // Remove nulls so DB defaults (created_at, etc.) work
     map.removeWhere((k, v) => v == null);
     return map;
   }
 
-  /// Insert into Supabase and return created row.
   static Future<Map<String, dynamic>> createInspection(InspectionDataModel inspection) async {
     try {
       final payload = inspection.toMap();
-
-      // Debug print for verification — remove in production if desired.
       // ignore: avoid_print
       print('Inserting inspection payload: ${jsonEncode(payload)}');
 
@@ -102,8 +106,6 @@ class InspectionDataModel {
       if (resp == null) throw Exception('No response after insert');
       return resp as Map<String, dynamic>;
     } catch (e) {
-      // Better error visibility for DB errors. Supabase returns detailed error strings,
-      // so we print and rethrow a wrapped exception.
       // ignore: avoid_print
       print('createInspection error: $e');
       throw Exception('Failed to create inspection: $e');

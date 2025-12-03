@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:majdur_p/auth/loginpage.dart';
 import 'package:majdur_p/pages/file_receipt/receipt_scanner.dart';
 import 'package:majdur_p/pages/Installation/install_scanner.dart';
-import 'package:majdur_p/pages/depot_receipt.dart';
+import 'package:majdur_p/pages/remove/depot_receipt.dart';
 import 'package:majdur_p/pages/history_page.dart';
 import 'package:majdur_p/pages/inspection/inspect_page.dart';
 import 'package:majdur_p/pages/sync_page.dart';
@@ -91,11 +91,11 @@ class HomePage extends StatelessWidget {
             ),
             _buildDashboardTile(
               icon: Icons.receipt,
-              label: 'Depot Receipt',
+              label: 'Part Removal',
               backgroundColor: secondaryBlue,
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => DepotReceiptPage()),
+                MaterialPageRoute(builder: (_) => PartRemovalScanner()),
               ),
             ),
             _buildDashboardTile(
