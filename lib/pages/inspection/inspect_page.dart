@@ -13,7 +13,9 @@ class InspectionScanner extends StatefulWidget {
 }
 
 class _InspectionScannerState extends State<InspectionScanner> {
-  final MobileScannerController _controller = MobileScannerController();
+  final MobileScannerController _controller = MobileScannerController(
+    formats: [BarcodeFormat.qrCode],
+  );
   bool _isProcessing = false;
 
   @override
@@ -141,13 +143,9 @@ class _InspectionScannerState extends State<InspectionScanner> {
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                icon: const Icon(Icons.camera_alt_outlined),
-                label: const Text('Scan'),
-                onPressed: () {
-                  // toggle torch as example or just ensure camera active
-                  // Here we simply ensure the controller is started and scanner visible
-                  _controller.start();
-                },
+                icon: const Icon(Icons.flash_on),
+                label: const Text('Flash'),
+                onPressed: () => _controller.toggleTorch(),
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
               ),
             ),

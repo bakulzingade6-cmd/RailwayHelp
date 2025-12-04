@@ -1,187 +1,126 @@
-// installation_DB.dart
+// lib/pages/installation_DB.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:majdur_p/datamodel/install_event_datamodel.dart';
-import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class InstallationDb extends StatelessWidget {
   final String rawJson;
   const InstallationDb({super.key, required this.rawJson});
 
-  @override
-  Widget build(BuildContext context) {
-    final Map<String, dynamic>? jsonData = _parseJson(rawJson);
-    if (jsonData == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Error')),
-        body: const Center(child: Text('Invalid QR Code Data')),
-      );
-    }
-
-    // Format data for display using camelCase keys (matches your table)
-    final String installedAtFormatted = _formatInstalledAt(jsonData['installedAt']);
-    final String locationFormatted = _formatLocation(jsonData['location']);
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Verify Installation Data')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDataRow('Client Event ID', _safeString(jsonData, 'clientEventId')),
-            _buildDataRow('Type', _safeString(jsonData, 'type', fallback: 'installation')),
-            _buildDataRow('QR ID', _safeString(jsonData, 'qrid')),
-            _buildDataRow('Asset ID', _safeString(jsonData, 'assetId')),
-            _buildDataRow('Installer', _safeString(jsonData, 'installerId')),
-            _buildDataRow('Track Section', _safeString(jsonData, 'trackSection')),
-            _buildDataRow('Installed At', installedAtFormatted),
-            _buildDataRow('Location', locationFormatted),
-            _buildDataRow('Notes', _safeString(jsonData, 'notes')),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => _uploadToSupabase(context, jsonData),
-              child: const Text('Confirm & Upload'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Map<String, dynamic>? _parseJson(String rawJson) {
+  Map<String, dynamic>? _parseJson(String raw) {
     try {
-      final parsed = json.decode(rawJson);
+      final parsed = json.decode(raw);
       if (parsed is Map<String, dynamic>) return parsed;
       return null;
     } catch (e) {
-      debugPrint('JSON parse error: $e');
+      // ignore: avoid_print
+      print('InstallationDb: JSON parse error -> $e');
       return null;
     }
   }
 
-  /// Returns a String from map[camelKey] safely; fallback used when missing/empty.
-  static String _safeString(Map<String, dynamic>? map, String camelKey, {String fallback = '—'}) {
-    if (map == null) return fallback;
-    final v = map[camelKey];
-    if (v == null) return fallback;
-    return v.toString();
-  }
-
-  static String _formatInstalledAt(dynamic installedAtValue) {
-    if (installedAtValue == null) return '—';
+  static String _formatInstalledAt(dynamic v) {
+    if (v == null) return '—';
     try {
-      DateTime dt;
-      if (installedAtValue is int) {
-        dt = DateTime.fromMillisecondsSinceEpoch(installedAtValue);
-      } else {
-        dt = DateTime.parse(installedAtValue.toString());
+      if (v is int) {
+        return DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(v));
       }
+      final dt = DateTime.parse(v.toString());
       return DateFormat('yyyy-MM-dd HH:mm').format(dt);
-    } catch (e) {
-      return installedAtValue.toString();
+    } catch (_) {
+      return v.toString();
     }
   }
 
   static String _formatLocation(dynamic loc) {
     if (loc == null) return '—';
-    try {
-      if (loc is Map) {
-        final lat = loc['lat']?.toString() ?? '—';
-        final lon = loc['lon']?.toString() ?? loc['lng']?.toString() ?? '—';
-        return 'Lat: $lat, Lon: $lon';
-      }
-      return loc.toString();
-    } catch (e) {
-      return loc.toString();
+    if (loc is Map) {
+      final lat = loc['lat'] ?? loc['latitude'] ?? '—';
+      final lng = loc['lng'] ?? loc['lon'] ?? loc['longitude'] ?? '—';
+      return 'Lat: $lat, Lon: $lng';
     }
+    return loc.toString();
   }
 
-  Widget _buildDataRow(String label, dynamic value) {
-    final valueText = (value == null || (value is String && value.isEmpty)) ? '—' : value.toString();
+  Widget _row(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-          Expanded(child: Text(valueText)),
-        ],
-      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+        Expanded(child: Text(value)),
+      ]),
     );
   }
 
-  Future<void> _uploadToSupabase(BuildContext context, Map<String, dynamic> data) async {
+  Future<void> _upload(BuildContext ctx, Map<String, dynamic> jsonData) async {
     final supabase = Supabase.instance.client;
     if (supabase == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Supabase client not initialized')));
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Supabase not initialized')));
       return;
     }
 
     final user = supabase.auth.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User not logged in')));
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('User not logged in')));
       return;
     }
 
+    final model = InstallEventDataModel.fromMap(jsonData, currentUserId: user.id);
+
+    // show progress
+    showDialog(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
-
-      // Parse installedAt (camelCase key)
-      final rawInstalled = data['installedAt'];
-      DateTime installedAt;
-      if (rawInstalled == null) {
-        installedAt = DateTime.now();
-      } else if (rawInstalled is int) {
-        installedAt = DateTime.fromMillisecondsSinceEpoch(rawInstalled);
-      } else {
-        try {
-          installedAt = DateTime.parse(rawInstalled.toString());
-        } catch (_) {
-          installedAt = DateTime.now();
-        }
-      }
-
-      // Build model (use camelCase keys to match your table)
-      final installEvent = InstallEventDataModel(
-        clientEventId: (data['clientEventId'] ?? '').toString(),
-        qrId: (data['qrid'] ?? '').toString(),
-        assetId: (data['assetId'] ?? '').toString(),
-        installerId: (data['installerId'] ?? '').toString(),
-        trackSection: (data['trackSection'] ?? '').toString(),
-        installedAt: installedAt,
-        location: (data['location'] is Map) ? Map<String, dynamic>.from(data['location']) : <String, dynamic>{},
-        notes: (data['notes'] ?? '').toString(),
-        verifiedBy: user.id,
-        verifiedAt: data['verifiedAt'] != null ? DateTime.tryParse(data['verifiedAt'].toString()) : null,
-        type: (data['type'] ?? 'installation').toString(),
-      );
-
-      // Insert into Supabase (the data model's toMap should produce camelCase keys matching table)
-      final response = await InstallEventDataModel.createInstallEvent(installEvent);
-
-      // Remove loading
-      if (Navigator.canPop(context)) Navigator.pop(context);
-
-      if (response != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Installation event saved successfully! ID: ${response['id']}')),
-        );
-        if (Navigator.canPop(context)) Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upload completed (no data returned)')));
-      }
+      final resp = await InstallEventDataModel.createInstallEvent(model);
+      if (Navigator.canPop(ctx)) Navigator.pop(ctx); // remove loader
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Saved: ${resp['id'] ?? 'ok'}')));
+      Navigator.of(ctx).pop(resp); // go back, return the response
     } catch (e) {
-      // Remove loading
-      if (Navigator.canPop(context)) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error uploading: ${e.toString()}')));
-      debugPrint('Supabase upload error: $e');
+      if (Navigator.canPop(ctx)) Navigator.pop(ctx);
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error uploading: $e')));
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = _parseJson(rawJson);
+    if (parsed == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Verify Installation Data')),
+        body: const Center(child: Text('Invalid QR JSON')),
+      );
+    }
+
+    final installedAtText = _formatInstalledAt(parsed['installedAt'] ?? parsed['installed_at']);
+    final locationText = _formatLocation(parsed['location'] ?? parsed['loc']);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Verify Installation Data')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _row('Client Event ID', (parsed['clientEventId'] ?? parsed['client_event_id'] ?? '—').toString()),
+          _row('Type', (parsed['type'] ?? 'installation').toString()),
+          _row('QR ID', (parsed['qrid'] ?? parsed['qrId'] ?? '—').toString()),
+          _row('Asset ID', (parsed['asset_id'] ?? parsed['assetId'] ?? '—').toString()),
+          _row('Installer', (parsed['installer_id'] ?? parsed['installerId'] ?? '—').toString()),
+          _row('Track Section', (parsed['track_section'] ?? parsed['trackSection'] ?? '—').toString()),
+          _row('Installed At', installedAtText),
+          _row('Location', locationText),
+          _row('Notes', (parsed['notes'] ?? '—').toString()),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: () => _upload(context, parsed),
+            child: const Text('Confirm & Upload'),
+          ),
+        ]),
+      ),
+    );
   }
 }

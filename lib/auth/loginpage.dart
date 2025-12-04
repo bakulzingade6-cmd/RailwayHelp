@@ -36,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
               children: [
                 const SizedBox(height: 20),
                 Image.asset(
-                  'assets/railway_logo.png', // Replace with your railway logo
+                  'assets/image.jpg', // Replace with your railway logo
                   height: 120,
                 ),
                 const SizedBox(height: 30),

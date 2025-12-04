@@ -77,7 +77,7 @@ class HomePage extends StatelessWidget {
               backgroundColor: secondaryBlue,
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => Install_Scanner()),
+                MaterialPageRoute(builder: (_) => InstallScannerPage()),
               ),
             ),
             _buildDashboardTile(

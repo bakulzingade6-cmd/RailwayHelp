@@ -40,10 +40,24 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
     _assetIdCtrl = TextEditingController(
       text: _toString(p['asset_id'] ?? p['assetId'] ?? p['assetId']),
     );
-    _status = _toString(p['status'], defaultValue: 'good');
+    
+    // Normalize status
+    String rawStatus = _toString(p['status'], defaultValue: 'good').toLowerCase();
+    if (!_statusOptions.contains(rawStatus)) {
+      rawStatus = 'good'; // fallback if invalid
+    }
+    _status = rawStatus;
+
     _notesCtrl = TextEditingController(text: _toString(p['notes']));
     _vendorCtrl = TextEditingController(text: _toString(p['vendor']));
-    _severity = _toString(p['severity'], defaultValue: 'low');
+    
+    // Normalize severity
+    String rawSeverity = _toString(p['severity'], defaultValue: 'low').toLowerCase();
+    if (!_severityOptions.contains(rawSeverity)) {
+      rawSeverity = 'low'; // fallback
+    }
+    _severity = rawSeverity;
+
     _photosCount = (p['photos_count'] ?? p['photosCount'] ?? 0) is num
         ? (p['photos_count'] ?? p['photosCount'] ?? 0) as int
         : int.tryParse(

@@ -1,119 +1,119 @@
+// lib/datamodel/install_event_datamodel.dart
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class InstallEventDataModel {
   final String? id;
-  final String clientEventId;
-  final String qrId;
+  final String? clientEventId;
+  final String type;
+  final String? qrid;
   final String? assetId;
-  final String installerId;
-  final String trackSection;
+  final String? installerId;
+  final String? trackSection;
   final DateTime installedAt;
-  final Map<String, dynamic> location;
+  final Map<String, dynamic>? location;
   final String? notes;
   final String verifiedBy;
   final DateTime? verifiedAt;
-  final String type;
 
   InstallEventDataModel({
     this.id,
-    required this.clientEventId,
-    required this.qrId,
+    this.clientEventId,
+    required this.type,
+    this.qrid,
     this.assetId,
-    required this.installerId,
-    required this.trackSection,
+    this.installerId,
+    this.trackSection,
     required this.installedAt,
-    required this.location,
+    this.location,
     this.notes,
     required this.verifiedBy,
     this.verifiedAt,
-    required this.type,
   });
 
-  /// CREATE from DB map
-  factory InstallEventDataModel.fromMap(Map<String, dynamic> data) {
+  /// Create from a map (e.g. parsed QR JSON). Accepts many key variants.
+  factory InstallEventDataModel.fromMap(Map<String, dynamic> m, {required String currentUserId}) {
+    // helper to parse a date value (string or int)
+    DateTime parseDate(dynamic v) {
+      if (v == null) return DateTime.now();
+      if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+      if (v is DateTime) return v;
+      final s = v.toString();
+      try {
+        return DateTime.parse(s);
+      } catch (_) {
+        // try common format with space `yyyy-MM-dd HH:mm`
+        try {
+          return DateTime.parse(s.replaceFirst(' ', 'T'));
+        } catch (_) {
+          return DateTime.now();
+        }
+      }
+    }
+
     return InstallEventDataModel(
-      id: data['id'],
-      clientEventId: data['clientEventId'] ?? data['client_event_id'] ?? '',
-      qrId: data['qrId'] ?? data['qrid'] ?? '',
-      assetId: data['assetId'] ?? data['asset_id'],
-      installerId: data['installerId'] ?? data['installer_id'] ?? '',
-      trackSection: data['trackSection'] ?? data['track_section'] ?? '',
-      installedAt: data['installedAt'] != null
-          ? DateTime.parse(data['installedAt'])
-          : DateTime.now(),
-      location: data['location'] ?? {},
-      notes: data['notes'],
-      verifiedBy: data['verifiedBy'] ?? data['verified_by'] ?? '',
-      verifiedAt: data['verifiedAt'] != null
-          ? DateTime.parse(data['verifiedAt'])
-          : null,
-      type: data['type'] ?? '',
+      id: m['id'] as String?,
+      clientEventId: (m['clientEventId'] ?? m['client_event_id']) as String?,
+      type: (m['type'] ?? 'installation') as String,
+      qrid: (m['qrid'] ?? m['qrId'] ?? m['qr_id']) as String?,
+      assetId: (m['asset_id'] ?? m['assetId'] ?? m['assetId']) as String?,
+      installerId: (m['installer_id'] ?? m['installerId'] ?? m['installerId']) as String?,
+      trackSection: (m['track_section'] ?? m['trackSection'] ?? m['trackSection']) as String?,
+      installedAt: parseDate(m['installedAt'] ?? m['installed_at'] ?? m['installed_at_epoch']),
+      location: (m['location'] is Map) ? Map<String, dynamic>.from(m['location']) : null,
+      notes: (m['notes'] ?? m['note']) as String?,
+      verifiedBy: currentUserId,
+      verifiedAt: null,
     );
   }
 
-  /// Convert to map for Supabase insert
-  Map<String, dynamic> toMap() {
-    final Map<String, dynamic> map = {
-      'clientEventId': clientEventId,
-      'qrid': qrId,
-      'installerId': installerId,
-      'trackSection': trackSection,
+  /// Convert to a Map matching the DB columns.
+  /// We include *both* snake_case and camelCase variants where table is ambiguous.
+  Map<String, dynamic> toMapForInsert() {
+    final map = <String, dynamic>{
+      'type': type,
+      'qrid': qrid,
+      'installer_id': installerId,
+      'track_section': trackSection,
       'installedAt': installedAt.toIso8601String(),
       'location': location,
       'notes': notes,
       'verifiedBy': verifiedBy,
-      'type': type,
+      'verifiedAt': verifiedAt?.toIso8601String(),
+      'clientEventId': clientEventId,
+      'assetId': assetId,
     };
 
-    if (assetId != null) map['asset_id'] = assetId;
-    if (verifiedAt != null) map['verifiedAt'] = verifiedAt!.toIso8601String();
-
-    // Only add id for update
-    if (id != null) map['id'] = id;
-
+    // remove nulls (so DB default values can apply)
+    map.removeWhere((k, v) => v == null);
     return map;
   }
 
-  /// Insert new event
-  static Future<Map<String, dynamic>> createInstallEvent(
-      InstallEventDataModel installEvent) async {
+  /// Insert into Supabase (returns the inserted row map)
+  static Future<Map<String, dynamic>> createInstallEvent(InstallEventDataModel ev) async {
+    final client = Supabase.instance.client;
+    final payload = ev.toMapForInsert();
+
+    // debug: print payload
+    // ignore: avoid_print
+    print('InstallEvent: inserting payload -> ${jsonEncode(payload)}');
+
     try {
-      final response = await Supabase.instance.client
+      final res = await client
           .from('install_events')
-          .insert(installEvent.toMap())
+          .insert(payload)
           .select()
           .maybeSingle();
 
-      if (response == null) {
-        throw Exception('Insert returned null');
-      }
-      return response;
+      // ignore: avoid_print
+      print('InstallEvent: insert response -> $res');
+      if (res == null) throw Exception('No response after insert');
+      return res as Map<String, dynamic>;
     } catch (e) {
-      throw Exception('Failed to create install event: $e');
-    }
-  }
-
-  /// Update existing
-  static Future<Map<String, dynamic>> updateInstallEvent(
-      InstallEventDataModel installEvent) async {
-    if (installEvent.id == null) {
-      throw Exception('Cannot update without ID');
-    }
-
-    try {
-      final response = await Supabase.instance.client
-          .from('install_events')
-          .update(installEvent.toMap())
-          .eq('id', installEvent.id!)
-          .select()
-          .maybeSingle();
-
-      if (response == null) {
-        throw Exception('Update returned null');
-      }
-      return response;
-    } catch (e) {
-      throw Exception('Failed to update install event: $e');
+      // include helpful debug message
+      // ignore: avoid_print
+      print('InstallEvent: insert error -> $e');
+      rethrow;
     }
   }
 }

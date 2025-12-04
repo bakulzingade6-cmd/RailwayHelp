@@ -34,7 +34,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                 const SizedBox(height: 20),
                 ClipOval(
                   child: Image.asset(
-                    'assets/railway_logo.png',
+                  'assets/image.jpg', // Replace with your railway logo
                     height: 140,
                     width: 140,
                     fit: BoxFit.cover,
