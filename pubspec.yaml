@@ -50,6 +50,7 @@ dependencies:
   http:
   riverpod: 
   device_preview: ^1.3.1
+  flutter_vision: 
 
 dev_dependencies:
   flutter_test:
@@ -76,6 +77,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/image.jpg
+    - assets/
     
 
   # An image asset can refer to one or more resolution-specific "variants", see

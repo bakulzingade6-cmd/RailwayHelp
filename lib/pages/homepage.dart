@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:majdur_p/auth/loginpage.dart';
+import 'package:majdur_p/pages/cv_detect.dart';
 import 'package:majdur_p/pages/file_receipt/receipt_scanner.dart';
 import 'package:majdur_p/pages/Installation/install_scanner.dart';
 import 'package:majdur_p/pages/remove/depot_receipt.dart';
@@ -9,7 +10,6 @@ import 'package:majdur_p/pages/sync_page.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -86,7 +86,7 @@ class HomePage extends StatelessWidget {
               backgroundColor: secondaryBlue,
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) =>  InspectionScanner()),
+                MaterialPageRoute(builder: (_) => InspectionScanner()),
               ),
             ),
             _buildDashboardTile(
@@ -108,12 +108,12 @@ class HomePage extends StatelessWidget {
               ),
             ),
             _buildDashboardTile(
-              icon: Icons.sync,
-              label: 'Sync Status',
+              icon: Icons.camera,
+              label: 'CV Classification',
               backgroundColor: secondaryBlue,
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => SyncStatusPage()),
+                MaterialPageRoute(builder: (_) => YoloImage11()),
               ),
             ),
           ],

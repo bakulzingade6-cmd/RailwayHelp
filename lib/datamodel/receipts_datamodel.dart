@@ -5,21 +5,25 @@ class ReceiptDataModel {
   final DateTime? date;
   final List<String>? items;
   final double? value;
+  final DateTime? warranty; // Added warranty field
 
   ReceiptDataModel({
     this.id,
     this.date,
     this.items,
     this.value,
+    this.warranty, // Added to constructor
   });
 
   // Factory constructor to create an instance from a Map
   factory ReceiptDataModel.fromMap(Map<String, dynamic> data) {
     return ReceiptDataModel(
       id: data['id'],
-      date: data['date'] != null ? DateTime.parse(data['date']) : null,
+      date: data['date'] != null ? DateTime.tryParse(data['date']) : null,
       items: data['items'] != null ? List<String>.from(data['items']) : null,
       value: data['value'] != null ? (data['value'] as num).toDouble() : null,
+      // Parse warranty
+      warranty: data['warranty'] != null ? DateTime.tryParse(data['warranty']) : null,
     );
   }
 
@@ -29,6 +33,7 @@ class ReceiptDataModel {
       'date': date?.toIso8601String(),
       'items': items,
       'value': value,
+      'warranty': warranty?.toIso8601String(), // Add to map
     };
 
     // Only include 'id' if it's not null
