@@ -20,7 +20,7 @@ class FileReceipt extends StatelessWidget {
     // Safe formatted date
     final String dateText = _formatDate(jsonData['date']);
     // Safe items string
-    final String itemsText = jsonData['items']?.toString() ?? '—';
+    final String itemsText = jsonData['items']?.toString() ?? '—';// im bakul
     // Safe value string
     final String valueText = jsonData['value']?.toString() ?? '—';
 
