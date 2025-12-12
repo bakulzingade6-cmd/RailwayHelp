@@ -30,15 +30,12 @@ class _InspectionScannerState extends State<InspectionScanner> {
   }
 
   void _onDetect(BarcodeCapture capture) async {
-    // defensive: ensure not already navigating/processing
     if (_isProcessing) return;
-
-    if (capture.barcodes.isEmpty) {
-      return;
-    }
+    if (capture.barcodes.isEmpty) return;
 
     final barcode = capture.barcodes.first;
     final raw = barcode.rawValue;
+
     if (raw == null || raw.trim().isEmpty) {
       _showSnack('QR Code empty or unreadable');
       return;
@@ -48,7 +45,6 @@ class _InspectionScannerState extends State<InspectionScanner> {
     try {
       final parsed = json.decode(raw);
       if (parsed is Map<String, dynamic>) {
-        // Navigate to form with prefill
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -61,26 +57,21 @@ class _InspectionScannerState extends State<InspectionScanner> {
     } catch (e) {
       _showSnack('Invalid QR JSON: ${e.toString()}');
     } finally {
-      // small delay to avoid immediate re-trigger from camera
       await Future.delayed(const Duration(milliseconds: 700));
       _isProcessing = false;
     }
   }
 
   Future<void> _onPastePressed() async {
-    // Try to read clipboard first
     String initialText = '';
     try {
       final clip = await Clipboard.getData(Clipboard.kTextPlain);
       if (clip != null && clip.text != null && clip.text!.trim().isNotEmpty) {
         initialText = clip.text!.trim();
       }
-    } catch (_) {
-      // ignore clipboard read errors
-    }
+    } catch (_) {}
 
     final controller = TextEditingController(text: initialText);
-
     final result = await showDialog<String?>(
       context: context,
       builder: (ctx) {
@@ -98,7 +89,7 @@ class _InspectionScannerState extends State<InspectionScanner> {
                   maxLines: 10,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
-                    hintText: '{"asset_id":"...","inspector":"..."}',
+                    hintText: '{"asset_id":"...","inspected_by":"..."}',
                   ),
                 ),
               ],
@@ -112,15 +103,11 @@ class _InspectionScannerState extends State<InspectionScanner> {
       },
     );
 
-    if (result == null || result.trim().isEmpty) {
-      return;
-    }
+    if (result == null || result.trim().isEmpty) return;
 
-    // Try parse JSON
     try {
       final parsed = json.decode(result);
       if (parsed is Map<String, dynamic>) {
-        // navigate to form page with prefill
         await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => InspectionFormPage(prefill: parsed)),
@@ -135,7 +122,6 @@ class _InspectionScannerState extends State<InspectionScanner> {
 
   @override
   Widget build(BuildContext context) {
-    // Bottom buttons style (similar to your screenshot)
     final bottomBar = SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
@@ -164,21 +150,15 @@ class _InspectionScannerState extends State<InspectionScanner> {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scan Inspection QR'),
-      ),
+      appBar: AppBar(title: const Text('Scan Inspection QR')),
       body: Stack(
         children: [
-          // Scanner fills the screen behind overlay
           Positioned.fill(
             child: MobileScanner(
               controller: _controller,
-              // use the current API without allowDuplicates
               onDetect: _onDetect,
             ),
           ),
-
-          // Instruction overlay (subtle)
           Positioned(
             top: 24,
             left: 0,
@@ -191,14 +171,7 @@ class _InspectionScannerState extends State<InspectionScanner> {
               ),
             ),
           ),
-
-          // Bottom paste/scan bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: bottomBar,
-          ),
+          Positioned(left: 0, right: 0, bottom: 0, child: bottomBar),
         ],
       ),
     );

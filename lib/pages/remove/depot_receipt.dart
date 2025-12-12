@@ -2,7 +2,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:majdur_p/datamodel/assets_datamodel.dart';
 import 'package:majdur_p/pages/remove/part_removal_detail.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -30,12 +29,12 @@ class _PartRemovalScannerState extends State<PartRemovalScanner> {
 
   Future<void> _handleRawJson(String raw) async {
     try {
-      final Map<String, dynamic> parsed = json.decode(raw);
-      final asset = AssetDataModel.fromMap(parsed);
+      final decoded = json.decode(raw);
+      final Map<String, dynamic> parsed = decoded is Map ? Map<String, dynamic>.from(decoded) : <String, dynamic>{};
       if (!mounted) return;
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => PartRemovalDetail(asset: asset)),
+        MaterialPageRoute(builder: (_) => PartRemovalDetail(assetMap: parsed)),
       );
     } catch (e) {
       _showSnack('Invalid JSON: $e');
@@ -67,7 +66,7 @@ class _PartRemovalScannerState extends State<PartRemovalScanner> {
           content: TextField(
             controller: controller,
             maxLines: 12,
-            decoration: const InputDecoration(hintText: '{"id":"..."}'),
+            decoration: const InputDecoration(hintText: '{"asset_id":"..."}'),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancel')),
@@ -118,11 +117,18 @@ class _PartRemovalScannerState extends State<PartRemovalScanner> {
               onDetect: _onDetect,
             ),
           ),
-          Positioned(top: 24, left: 0, right: 0, child: Center(child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)),
-            child: const Text('Point camera at asset QR (JSON) or use Paste', style: TextStyle(color: Colors.white)),
-          ))),
+          Positioned(
+            top: 24,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)),
+                child: const Text('Point camera at asset QR (JSON) or use Paste', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ),
           Positioned(left: 0, right: 0, bottom: 0, child: bottomBar),
         ],
       ),

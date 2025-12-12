@@ -1,2 +1,6 @@
-good
-bad
+ERC_clip_bad
+ERC_clip_good
+liner_bad
+liner_good
+sleeper_pad_bad
+sleeper_pad_good

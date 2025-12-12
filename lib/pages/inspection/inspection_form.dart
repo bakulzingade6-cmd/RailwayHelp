@@ -1,10 +1,10 @@
-// lib/pages/inspection_form.dart
+// lib/pages/inspection/inspection_form.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:majdur_p/datamodel/inspections_datamodel.dart';
 
 class InspectionFormPage extends StatefulWidget {
-  final Map<String, dynamic>? prefill; // scanned JSON (optional)
+  final Map<String, dynamic>? prefill;
   const InspectionFormPage({super.key, this.prefill});
 
   @override
@@ -13,57 +13,60 @@ class InspectionFormPage extends StatefulWidget {
 
 class _InspectionFormPageState extends State<InspectionFormPage> {
   final _formKey = GlobalKey<FormState>();
-
   DateTime? _date;
-  late TextEditingController _inspectorCtrl;
+  late TextEditingController _inspectedByCtrl;
   late TextEditingController _assetIdCtrl;
-  String _status = 'good';
-  late TextEditingController _notesCtrl;
-  late TextEditingController _vendorCtrl;
-  String _severity = 'low';
+  // friendly UI default value
+  String _partStatus = 'Pass';
+  late TextEditingController _inspectDetailCtrl;
   int _photosCount = 0;
+  String _severity = 'Low';
   bool _loading = false;
 
-  final List<String> _statusOptions = ['good', 'needs repair', 'critical'];
-  final List<String> _severityOptions = ['low', 'medium', 'high'];
+  // Friendly labels shown to user
+  final List<String> _partStatusOptions = ['Pass', 'Fail', 'Needs Repair'];
+  final List<String> _severityOptions = ['Low', 'Medium', 'High'];
+
+  // MAP: UI label -> exact DB literal (update these if your DB literal is different)
+  // From your constraint output we know DB expects "Good" and "Need Repair".
+  // If DB uses a different literal for failure (e.g. 'Bad' or 'Fail'), change the right-hand value.
+  final Map<String, String> _statusMap = {
+    'Pass': 'Good',
+    'Fail': 'Fail', // <-- replace 'Fail' with the exact allowed DB string if different
+    'Needs Repair': 'Need Repair',
+  };
 
   @override
   void initState() {
     super.initState();
     final p = widget.prefill ?? {};
+    _date = _parseDate(p['inspection_date'] ?? p['date']);
+    _inspectedByCtrl = TextEditingController(text: _toString(p['inspected_by'] ?? p['inspector']));
+    _assetIdCtrl = TextEditingController(text: _toString(p['asset_id'] ?? p['assetId']));
+    // Accept incoming DB literal or UI label; try to present friendly UI label when prefill contains DB literal
+    final prePart = _toString(p['part_status'] ?? p['status'], defaultValue: 'Pass');
 
-    // Prefill logic: support snake_case and camelCase keys
-    _date = _parseDate(p['date'] ?? p['installedAt'] ?? p['installed_at']);
-    _inspectorCtrl = TextEditingController(
-      text: _toString(p['inspector'] ?? p['inspectorId'] ?? p['inspector_id']),
+    // If prefill contains a DB literal, convert it back to friendly UI label
+    _partStatus = _uiLabelFromDb(prePart);
+    _inspectDetailCtrl = TextEditingController(text: _toString(p['inspect_detail'] ?? p['notes']));
+    _photosCount = (p['photos_count'] ?? 0) is num
+        ? (p['photos_count'] ?? 0) as int
+        : int.tryParse(p['photos_count']?.toString() ?? '0') ?? 0;
+    _severity = _toString(p['severity'], defaultValue: 'Low');
+  }
+
+  // Convert DB literal back to the friendly UI label if possible
+  String _uiLabelFromDb(String value) {
+    // If incoming value already matches a friendly label, return it
+    if (_partStatusOptions.contains(value)) return value;
+    // Otherwise try to find a friendly label by matching map values
+    final entry = _statusMap.entries.firstWhere(
+      (e) => e.value.toLowerCase() == value.trim().toLowerCase(),
+      orElse: () => const MapEntry('', ''),
     );
-    _assetIdCtrl = TextEditingController(
-      text: _toString(p['asset_id'] ?? p['assetId'] ?? p['assetId']),
-    );
-    
-    // Normalize status
-    String rawStatus = _toString(p['status'], defaultValue: 'good').toLowerCase();
-    if (!_statusOptions.contains(rawStatus)) {
-      rawStatus = 'good'; // fallback if invalid
-    }
-    _status = rawStatus;
-
-    _notesCtrl = TextEditingController(text: _toString(p['notes']));
-    _vendorCtrl = TextEditingController(text: _toString(p['vendor']));
-    
-    // Normalize severity
-    String rawSeverity = _toString(p['severity'], defaultValue: 'low').toLowerCase();
-    if (!_severityOptions.contains(rawSeverity)) {
-      rawSeverity = 'low'; // fallback
-    }
-    _severity = rawSeverity;
-
-    _photosCount = (p['photos_count'] ?? p['photosCount'] ?? 0) is num
-        ? (p['photos_count'] ?? p['photosCount'] ?? 0) as int
-        : int.tryParse(
-                (p['photos_count'] ?? p['photosCount'] ?? 0).toString(),
-              ) ??
-              0;
+    if (entry.key.isNotEmpty) return entry.key;
+    // fallback: return a friendly default
+    return 'Pass';
   }
 
   static String _toString(dynamic v, {String defaultValue = ''}) {
@@ -83,10 +86,9 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
 
   @override
   void dispose() {
-    _inspectorCtrl.dispose();
+    _inspectedByCtrl.dispose();
     _assetIdCtrl.dispose();
-    _notesCtrl.dispose();
-    _vendorCtrl.dispose();
+    _inspectDetailCtrl.dispose();
     super.dispose();
   }
 
@@ -101,26 +103,36 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
     if (picked != null) setState(() => _date = picked);
   }
 
+  // Normalize / map friendly UI label to the exact DB literal
+  String _normalizePartStatusForDb(String uiValue) {
+    final mapped = _statusMap[uiValue];
+    if (mapped != null && mapped.trim().isNotEmpty) return mapped.trim();
+    // fallback: send trimmed uiValue (useful if mapping missing)
+    return uiValue.trim();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-
     try {
+      final dbStatus = _normalizePartStatusForDb(_partStatus);
+      // debug: verify exactly what we will send to DB
+      // check your console/logs to confirm this matches the allowed strings from your constraint
+      // Example console output: sending part_status="Good" (ui="Pass")
+      // Remove or comment out this print in production if you want.
+      // ignore: avoid_print
+      print('DEBUG: sending part_status="$dbStatus" (ui="$_partStatus")');
+
       final model = InspectionDataModel(
-        date: _date,
-        inspector: _inspectorCtrl.text.trim(),
+        inspectionDate: _date,
+        inspectedBy: _inspectedByCtrl.text.trim(),
         assetId: _assetIdCtrl.text.trim(),
-        status: _status,
-        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        vendor: _vendorCtrl.text.trim().isEmpty
-            ? null
-            : _vendorCtrl.text.trim(),
-        severity: _severity,
+        partStatus: dbStatus,
+        inspectDetail: _inspectDetailCtrl.text.trim().isEmpty ? null : _inspectDetailCtrl.text.trim(),
         photosCount: _photosCount,
+        severity: _severity,
       );
-
       final resp = await InspectionDataModel.createInspection(model);
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saved — id: ${resp['id'] ?? 'unknown'}')),
@@ -128,9 +140,7 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
       Navigator.of(context).pop(resp);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -138,9 +148,8 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final dateText = _date != null
-        ? DateFormat('yyyy-MM-dd').format(_date!)
-        : 'Pick date';
+    final dateText = _date != null ? DateFormat('yyyy-MM-dd').format(_date!) : 'Pick date';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Inspection Form')),
       body: Padding(
@@ -149,85 +158,53 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
           key: _formKey,
           child: ListView(
             children: [
-              // Date
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Date'),
                 subtitle: Text(dateText),
-                trailing: TextButton(
-                  onPressed: _pickDate,
-                  child: const Text('Pick'),
-                ),
+                trailing: TextButton(onPressed: _pickDate, child: const Text('Pick')),
               ),
               const SizedBox(height: 8),
-
-              // Inspector
               TextFormField(
-                controller: _inspectorCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Inspector (required)',
-                ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Enter inspector' : null,
+                controller: _inspectedByCtrl,
+                decoration: const InputDecoration(labelText: 'Inspected By (required)'),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter inspected by' : null,
               ),
               const SizedBox(height: 8),
-
-              // Asset ID
               TextFormField(
                 controller: _assetIdCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Asset ID (required)',
-                ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Enter asset id' : null,
+                decoration: const InputDecoration(labelText: 'Asset ID (required)'),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter asset id' : null,
               ),
               const SizedBox(height: 12),
-
-              // Status (3 options)
-              const Text(
-                'Status',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              const Text('Part Status', style: TextStyle(fontWeight: FontWeight.bold)),
               Column(
-                children: _statusOptions.map((s) {
+                children: _partStatusOptions.map((s) {
                   return RadioListTile<String>(
                     title: Text(s),
                     value: s,
-                    groupValue: _status,
-                    onChanged: (val) =>
-                        setState(() => _status = val ?? _status),
+                    groupValue: _partStatus,
+                    onChanged: (val) => setState(() => _partStatus = val ?? _partStatus),
                   );
                 }).toList(),
               ),
               const SizedBox(height: 12),
-
-              // Severity
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Severity'),
                 value: _severity,
-                items: _severityOptions
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
+                items: _severityOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (v) => setState(() => _severity = v ?? _severity),
               ),
               const SizedBox(height: 12),
-
-              // Vendor
               TextFormField(
-                controller: _vendorCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Vendor (optional)',
-                ),
+                controller: _inspectDetailCtrl,
+                decoration: const InputDecoration(labelText: 'Inspect Detail (optional)'),
+                maxLines: 3,
               ),
               const SizedBox(height: 12),
-
-              // Photos count
               Row(
                 children: [
-                  const Text(
-                    'Photos count',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  const Text('Photos count', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Slider(
@@ -236,29 +213,17 @@ class _InspectionFormPageState extends State<InspectionFormPage> {
                       max: 20,
                       divisions: 20,
                       label: '$_photosCount',
-                      onChanged: (v) =>
-                          setState(() => _photosCount = v.round()),
+                      onChanged: (v) => setState(() => _photosCount = v.round()),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text('$_photosCount'),
                 ],
               ),
-              const SizedBox(height: 12),
-
-              // Notes
-              TextFormField(
-                controller: _notesCtrl,
-                decoration: const InputDecoration(labelText: 'Notes'),
-                maxLines: 4,
-              ),
               const SizedBox(height: 20),
-
               ElevatedButton(
                 onPressed: _loading ? null : _submit,
-                child: _loading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Submit'),
+                child: _loading ? const CircularProgressIndicator(color: Colors.white) : const Text('Submit'),
               ),
             ],
           ),

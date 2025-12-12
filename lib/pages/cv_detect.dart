@@ -35,7 +35,7 @@ class _YoloImage11State extends State<YoloImage11> {
     try {
       await vision.loadYoloModel(
         labels: 'assets/labels.txt',
-        modelPath: 'assets/best_float32.tflite', // your float32 model
+        modelPath: 'assets/best_float32_300.tflite', // your float32 model
         modelVersion: "yolov11", // IMPORTANT for YOLO 11
         quantization: false, // float32 => false
         numThreads: 2,
@@ -184,7 +184,7 @@ class YoloImageBoxPainter extends CustomPainter {
     if (results.isEmpty) return;
 
     final boxPaint = Paint()
-      ..color = Colors.red
+      ..color = const ui.Color.fromARGB(255, 244, 54, 54)
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
 
